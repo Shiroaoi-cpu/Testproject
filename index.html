@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14110e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="木こりの森">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>木こりの森</title>
+<style>
+  :root{
+    --bg:#14110e; --surface:#211b16; --surface2:#2c241d; --text:#f0e9e0; --muted:#b8a892;
+    --gold:#e6b23c; --green:#5cc27a; --blue:#5aa9e6; --gray:#a7a29b; --amber:#e0a52c;
+    --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.18);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",Roboto,sans-serif;
+    overscroll-behavior:none}
+  body{max-width:600px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 20px);min-height:100vh}
+  .top{background:var(--surface);border-radius:14px;padding:10px 14px;margin-bottom:12px}
+  .toprow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .lvbadge{font-size:15px;font-weight:600}
+  .goldbig{font-size:20px;font-weight:600;color:var(--gold)}
+  .fuel{font-size:12px;color:var(--muted)}
+  .xpbar{height:6px;background:rgba(255,255,255,.08);border-radius:6px;margin-top:8px;overflow:hidden}
+  .xpfill{height:100%;background:var(--green);width:0%}
+  .xptext{font-size:11px;color:var(--muted);margin-top:4px}
+  .offline{display:none;background:rgba(92,194,122,.14);border:1px solid rgba(92,194,122,.3);
+    border-radius:12px;padding:9px 13px;margin-bottom:12px;font-size:13px;color:var(--green)}
+  .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+  .tab{border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:12px;
+    padding:9px 4px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3}
+  .tab.active{background:var(--surface2);color:var(--text);border-color:var(--border-strong)}
+  .tab.locked{opacity:.5}
+  .tab small{display:block;font-size:10px;font-weight:400}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+  .chip{background:var(--surface);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--muted)}
+  .chip b{color:var(--text);font-weight:600;font-size:14px;margin-left:4px}
+  .actions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:18px}
+  .btn{border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);border-radius:13px;
+    font-family:inherit;cursor:pointer;transition:transform .05s,background .15s}
+  .btn:active{transform:scale(.97);background:#362c22}
+  .btn:disabled{opacity:.45;cursor:default}
+  .action{min-height:62px;font-size:14px;font-weight:600;padding:8px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;line-height:1.25}
+  .action.primary{background:#3a2e1e;border-color:rgba(230,178,60,.4)}
+  .action small{font-weight:400;font-size:11px;color:var(--muted)}
+  .sect{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px}
+  .shop{display:flex;flex-direction:column;gap:8px}
+  .up{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;text-align:left;width:100%}
+  .up.dim{opacity:.5}
+  .up .name{font-weight:600;font-size:14px}
+  .up .lv{font-size:12px;color:var(--muted);margin-left:6px}
+  .up .desc{font-size:11px;color:var(--muted);margin-top:2px}
+  .up .price{font-weight:600;white-space:nowrap;color:var(--gold);font-size:14px}
+  .up.dim .price{color:var(--muted)}
+  .footer{display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:10px}
+  .msg{font-size:13px;color:var(--green);min-height:18px;flex:1}
+  .savestate{font-size:11px;color:var(--muted)}
+  .mini{height:32px;font-size:12px;padding:0 12px}
+  h1{font-size:18px;font-weight:600;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+</style>
+</head>
+<body>
+  <h1><span class="dot"></span> 木こりの森</h1>
+
+  <div class="top">
+    <div class="toprow">
+      <span class="lvbadge">Lv.<span id="lv">1</span></span>
+      <span class="goldbig"><span id="gold">0</span> G</span>
+    </div>
+    <div class="xpbar"><div class="xpfill" id="xpfill"></div></div>
+    <div class="xptext">XP <span id="xpnow">0</span> / <span id="xpneed">0</span> ・ 火力ストック <span id="fuel">0</span></div>
+  </div>
+
+  <div class="offline" id="offline"></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="chips" id="chips"></div>
+  <div class="actions" id="actions"></div>
+  <div class="sect">アップグレード</div>
+  <div class="shop" id="shop"></div>
+
+  <div class="footer">
+    <div class="msg" id="msg"></div>
+    <span class="savestate" id="saveState"></span>
+    <button class="btn mini" id="reset">リセット</button>
+  </div>
+
+<script>
+(function(){
+"use strict";
+var KEY='kikori_save_v2';
+
+/* ===== 定義 ===== */
+var FISH=['zako','chu','oo','rare','ultra'];
+var FISH_NAME={zako:'雑魚',chu:'中型',oo:'大物',rare:'レア魚',ultra:'超レア魚'};
+var FISH_PRICE={zako:5,chu:20,oo:80,rare:400,ultra:5000};
+var HIMONO_PRICE=10;
+var ORE=['iron','copper','silver','gold','ori'];
+var ORE_NAME={iron:'鉄',copper:'銅',silver:'銀',gold:'金',ori:'オリハルコン'};
+var INGOT_PRICE={iron:100,copper:200,silver:300,gold:800,ori:2000};
+var SMELT_FUEL={iron:1,copper:1,silver:2,gold:3,ori:5};
+
+var RECIPES=[
+  {id:'yakizakana',name:'焼き魚',ins:{zako:1},fuel:1,price:30},
+  {id:'sakamushi',name:'貝の酒蒸し',ins:{chu:2},fuel:1,price:60},
+  {id:'teishoku',name:'魚定食',ins:{himono:2},fuel:2,price:120},
+  {id:'sugatayaki',name:'大物の姿焼き',ins:{oo:1,himono:1},fuel:2,price:300},
+  {id:'ogon',name:'黄金焼き魚',ins:{rare:1,gold:1},fuel:3,price:1500},
+  {id:'dessert',name:'宝石デザート',ins:{gem:1,himono:2},fuel:3,price:2500},
+  {id:'course',name:'豪華コース',ins:{rare:1,gem:1},fuel:5,price:3000},
+  {id:'utage',name:'王宮の宴',ins:{ultra:1,ori:1,gem:1},fuel:5,price:20000}
+];
+
+/* 自動施設: 毎秒 = base * level */
+var FAC={
+  kikori:{rate:8}, seizai:{rate:2}, sumiyaki:{rate:1}, shirozumiK:{rate:.8}, binchoK:{rate:.5}, gyosho:{rate:4},
+  tsuribito:{rate:1}, himonodana:{rate:1}, nakagai:{rate:2},
+  sakugan:{rate:1}, yokoro:{rate:.5}, kinzokusho:{rate:1},
+  cook:{rate:.5}, ryoriten:{rate:1}
+};
+
+/* 購入項目: kind fac/up, base費用, grow, 解放Lv */
+var BUY={
+  axe:{tab:'wood',kind:'up',name:'鋭い斧',desc:'1回の伐採量 +1',base:15,grow:1.6,lv:1},
+  kikori:{tab:'wood',kind:'fac',name:'木こり',desc:'原木を自動伐採',base:50,grow:1.9,lv:1},
+  seizai:{tab:'wood',kind:'fac',name:'製材所',desc:'原木5→板材1 を自動',base:120,grow:2.0,lv:1},
+  gyosho:{tab:'wood',kind:'fac',name:'行商人',desc:'板材を自動販売',base:200,grow:2.0,lv:1},
+  hanro:{tab:'wood',kind:'up',name:'販路拡大',desc:'板材の売値 +5',base:300,grow:1.8,lv:1},
+  sumiyaki:{tab:'wood',kind:'fac',name:'炭焼き窯',desc:'板材2→オガ炭1(火力1)',base:400,grow:2.0,lv:5},
+  shirozumiK:{tab:'wood',kind:'fac',name:'白炭窯',desc:'板材3→白炭1(火力3)',base:25000,grow:2.0,lv:20},
+  binchoK:{tab:'wood',kind:'fac',name:'備長炭窯',desc:'板材2→備長炭1(火力5)',base:200000,grow:2.0,lv:35},
+  tsuribito:{tab:'fish',kind:'fac',name:'釣り人',desc:'魚を自動で釣る',base:1500,grow:1.9,lv:10},
+  himonodana:{tab:'fish',kind:'fac',name:'干物棚',desc:'雑魚1→干物1 を自動',base:3000,grow:2.0,lv:10},
+  nakagai:{tab:'fish',kind:'fac',name:'仲買人',desc:'魚・干物を自動販売',base:4000,grow:2.0,lv:10},
+  lure:{tab:'fish',kind:'up',name:'ルアー',desc:'高ランクの魚が出やすい',base:2000,grow:1.9,lv:10},
+  sakugan:{tab:'ore',kind:'fac',name:'削岩機',desc:'鉱石を自動採掘',base:40000,grow:1.9,lv:30},
+  yokoro:{tab:'ore',kind:'fac',name:'溶鉱炉',desc:'鉱石3+火力→インゴット を自動',base:90000,grow:2.0,lv:30},
+  kinzokusho:{tab:'ore',kind:'fac',name:'金属商',desc:'インゴットを自動販売',base:120000,grow:2.0,lv:30},
+  depth:{tab:'ore',kind:'up',name:'坑道拡張',desc:'より深い鉱石を採掘可能に',base:60000,grow:2.4,lv:30,max:4},
+  cook:{tab:'cook',kind:'fac',name:'コック',desc:'選択レシピを自動調理',base:1000000,grow:1.9,lv:50},
+  ryoriten:{tab:'cook',kind:'fac',name:'料理店',desc:'料理を自動販売',base:2000000,grow:2.0,lv:50},
+  kanban:{tab:'cook',kind:'up',name:'看板',desc:'料理の売値 +10%',base:2000000,grow:1.9,lv:50}
+};
+
+var TABS=[
+  {id:'wood',name:'材木',lv:1},
+  {id:'fish',name:'釣り',lv:10},
+  {id:'ore',name:'鉱石',lv:30},
+  {id:'cook',name:'料理',lv:50}
+];
+
+/* ===== 状態 ===== */
+function newState(){
+  var s={lv:1,xp:0,gold:0,dishes:[],cookSel:'yakizakana',t:Date.now(),
+    res:{log:0,plank:0,ogatan:0,shirozumi:0,binchotan:0,himono:0,gem:0},
+    fac:{},up:{},acc:{}};
+  FISH.forEach(function(f){s.res[f]=0;});
+  ORE.forEach(function(o){s.res[o+'_ore']=0; s.res[o]=0;});
+  for(var k in FAC) s.fac[k]=0;
+  for(var k in BUY) if(BUY[k].kind==='up') s.up[k]=0;
+  for(var k in FAC) s.acc[k]=0;
+  return s;
+}
+var S;
+var tab='wood';
+
+var $=function(id){return document.getElementById(id);};
+function fmt(n){return Math.floor(n).toLocaleString();}
+function msg(t){$('msg').textContent=t;}
+
+/* ===== 経済ヘルパー ===== */
+function treeMult(){return S.lv>=35?4:(S.lv>=15?2:1);}
+function plankPrice(){return (10+ S.up.hanro*5)*treeMult();}
+function kanbanMult(){return 1+0.1*S.up.kanban;}
+function xpToNext(lv){return Math.round(20*Math.pow(lv,1.7));}
+function totalFuel(){return S.res.ogatan*1 + S.res.shirozumi*3 + S.res.binchotan*5;}
+function rate(id){return FAC[id].rate * S.fac[id];}
+function cost(id){var b=BUY[id];var lvl=(b.kind==='fac'?S.fac[id]:S.up[id]);return Math.round(b.base*Math.pow(b.grow,lvl));}
+
+function addXp(n){
+  S.xp+=n;
+  while(S.xp>=xpToNext(S.lv)){
+    S.xp-=xpToNext(S.lv); S.lv++;
+    var names={5:'炭焼き窯',10:'釣り',20:'白炭窯',30:'鉱石',35:'備長炭窯(樫)',50:'料理'};
+    if(names[S.lv]) msg('Lv.'+S.lv+' 到達！ '+names[S.lv]+' が解放されました');
+  }
+}
+
+/* 火力支払い: 無駄が最小になるよう オガ炭優先→白炭→備長炭 */
+function payFuel(F){
+  if(totalFuel() < F - 1e-9) return false;
+  var need=F;
+  var o=Math.min(Math.floor(S.res.ogatan), need); need-=o;
+  var s=0,b=0;
+  while(need>0 && S.res.shirozumi>s){ s++; need-=3; }
+  while(need>0 && S.res.binchotan>b){ b++; need-=5; }
+  if(need>0){ // オガ炭で端数補完に失敗した場合の保険
+    while(need>0 && S.res.ogatan>o){ o++; need-=1; }
+  }
+  if(need>0) return false;
+  S.res.ogatan-=o; S.res.shirozumi-=s; S.res.binchotan-=b;
+  return true;
+}
+
+function fishWeights(){
+  var L=S.up.lure;
+  return {zako:Math.max(5,40-2*L), chu:30, oo:15, rare:10+L, ultra:5+L};
+}
+function pickFish(){
+  var w=fishWeights(),sum=0,i;
+  for(i=0;i<FISH.length;i++) sum+=w[FISH[i]];
+  var r=Math.random()*sum;
+  for(i=0;i<FISH.length;i++){ r-=w[FISH[i]]; if(r<=0) return FISH[i]; }
+  return 'zako';
+}
+function oreRanksAvail(){return Math.min(ORE.length, 1+S.up.depth);}
+
+function canCook(rc){
+  if(!rc) return false;
+  for(var k in rc.ins){ if(Math.floor(S.res[k]||0) < rc.ins[k]) return false; }
+  return totalFuel() >= rc.fuel;
+}
+function doCook(rc){
+  if(!canCook(rc)) return false;
+  for(var k in rc.ins) S.res[k]-=rc.ins[k];
+  if(!payFuel(rc.fuel)){ for(var k in rc.ins) S.res[k]+=rc.ins[k]; return false; }
+  S.dishes.push(Math.round(rc.price*kanbanMult()));
+  return true;
+}
+function recipeById(id){for(var i=0;i<RECIPES.length;i++) if(RECIPES[i].id===id) return RECIPES[i]; return RECIPES[0];}
+
+/* ===== 自動処理 1tick(秒) ===== */
+function step(){
+  var f=S.fac, r=S.res, a=S.acc, u, i;
+  function units(id){ a[id]+=rate(id); var n=Math.floor(a[id]); a[id]-=n; return n; }
+
+  if(f.kikori){ u=units('kikori'); r.log+=u; addXp(u); }
+  if(f.seizai){ u=Math.min(units('seizai'), Math.floor(r.log/5)); r.log-=5*u; r.plank+=u; addXp(2*u); }
+  if(f.sumiyaki){ u=Math.min(units('sumiyaki'), Math.floor(r.plank/2)); r.plank-=2*u; r.ogatan+=u; addXp(2*u); }
+  if(f.shirozumiK){ u=Math.min(units('shirozumiK'), Math.floor(r.plank/3)); r.plank-=3*u; r.shirozumi+=u; addXp(2*u); }
+  if(f.binchoK){ u=Math.min(units('binchoK'), Math.floor(r.plank/2)); r.plank-=2*u; r.binchotan+=u; addXp(2*u); }
+  if(f.gyosho){ u=Math.min(units('gyosho'), Math.floor(r.plank)); r.plank-=u; S.gold+=u*plankPrice(); addXp(3*u); }
+
+  if(f.tsuribito){ u=units('tsuribito'); if(u>0){ var w=fishWeights(),sum=0; for(i=0;i<FISH.length;i++) sum+=w[FISH[i]];
+    for(i=0;i<FISH.length;i++) r[FISH[i]]+=u*w[FISH[i]]/sum; addXp(4*u); } }
+  if(f.himonodana){ u=Math.min(units('himonodana'), Math.floor(r.zako)); r.zako-=u; r.himono+=u; addXp(2*u); }
+  if(f.nakagai){ var cap=units('nakagai'),sold=0,k;
+    for(i=FISH.length-1;i>=0;i--){ k=Math.min(cap,Math.floor(r[FISH[i]])); r[FISH[i]]-=k; S.gold+=k*FISH_PRICE[FISH[i]]; cap-=k; sold+=k; }
+    k=Math.min(cap,Math.floor(r.himono)); r.himono-=k; S.gold+=k*HIMONO_PRICE; sold+=k; addXp(3*sold); }
+
+  if(f.sakugan){ u=units('sakugan'); if(u>0){ var av=oreRanksAvail(),ws=0; for(i=0;i<av;i++) ws+=(av-i);
+    for(i=0;i<av;i++) r[ORE[i]+'_ore']+=u*(av-i)/ws; r.gem+=u*0.01; addXp(6*u); } }
+  if(f.yokoro){ var capy=units('yokoro'),madey=0;
+    for(i=ORE.length-1;i>=0 && capy>=1;i--){ var oid=ORE[i];
+      while(capy>=1 && Math.floor(r[oid+'_ore'])>=3 && totalFuel()>=SMELT_FUEL[oid]){
+        r[oid+'_ore']-=3; payFuel(SMELT_FUEL[oid]); r[oid]+=1; capy--; madey++; } }
+    addXp(8*madey); }
+  if(f.kinzokusho){ var capk=units('kinzokusho'),soldk=0,k2;
+    for(i=ORE.length-1;i>=0;i--){ k2=Math.min(capk,Math.floor(r[ORE[i]])); r[ORE[i]]-=k2; S.gold+=k2*INGOT_PRICE[ORE[i]]; capk-=k2; soldk+=k2; }
+    addXp(3*soldk); }
+
+  if(f.cook){ u=units('cook'); var rc=recipeById(S.cookSel); for(i=0;i<u;i++){ if(doCook(rc)) addXp(12); else break; } }
+  if(f.ryoriten){ var capd=units('ryoriten'); while(capd>=1 && S.dishes.length){ S.gold+=S.dishes.shift(); capd--; addXp(3); } }
+}
+
+/* ===== 手動アクション ===== */
+function actChop(){ var g=(1+S.up.axe); S.res.log+=g; addXp(Math.ceil(1.5)); render(); }
+function actProcess(){ if(Math.floor(S.res.log)<5){msg('原木が足りません(5必要)');return;} S.res.log-=5; S.res.plank+=1; addXp(3); render(); }
+function actCharcoal(){ if(Math.floor(S.res.plank)<2){msg('板材が足りません(2必要)');return;} S.res.plank-=2; S.res.ogatan+=1; addXp(3); render(); }
+function actSellPlank(){ if(Math.floor(S.res.plank)<1){msg('板材がありません');return;} S.res.plank-=1; S.gold+=plankPrice(); addXp(4); render(); }
+function actCast(){ var r=pickFish(); S.res[r]+=1; addXp(6); msg((FISH_NAME[r])+'が釣れた！'); render(); }
+function actDry(){ if(Math.floor(S.res.zako)<1){msg('雑魚がありません');return;} S.res.zako-=1; S.res.himono+=1; addXp(3); render(); }
+function actSellFish(){ for(var i=FISH.length-1;i>=0;i--){ if(Math.floor(S.res[FISH[i]])>=1){ S.res[FISH[i]]-=1; S.gold+=FISH_PRICE[FISH[i]]; addXp(4); render(); return; } }
+  if(Math.floor(S.res.himono)>=1){ S.res.himono-=1; S.gold+=HIMONO_PRICE; addXp(4); render(); return; } msg('売る魚がありません'); }
+function actMine(){ var av=oreRanksAvail(),ws=0,i; for(i=0;i<av;i++) ws+=(av-i); var rr=Math.random()*ws,pick=0;
+  for(i=0;i<av;i++){ rr-=(av-i); if(rr<=0){pick=i;break;} } S.res[ORE[pick]+'_ore']+=1;
+  if(Math.random()<0.01){ S.res.gem+=1; msg('宝石を発見！'); } addXp(6); render(); }
+function actSmelt(){ for(var i=ORE.length-1;i>=0;i--){ var o=ORE[i];
+  if(Math.floor(S.res[o+'_ore'])>=3 && totalFuel()>=SMELT_FUEL[o]){ S.res[o+'_ore']-=3; payFuel(SMELT_FUEL[o]); S.res[o]+=1; addXp(8); msg(ORE_NAME[o]+'インゴットを製錬'); render(); return; } }
+  msg('製錬できる鉱石/火力が不足'); }
+function actSellIngot(){ for(var i=ORE.length-1;i>=0;i--){ if(Math.floor(S.res[ORE[i]])>=1){ S.res[ORE[i]]-=1; S.gold+=INGOT_PRICE[ORE[i]]; addXp(3); render(); return; } } msg('売るインゴットがありません'); }
+function actCook(){ var rc=recipeById(S.cookSel); if(doCook(rc)){ addXp(12); msg(rc.name+'を調理'); } else msg('素材か火力が足りません'); render(); }
+function actSellDish(){ if(S.dishes.length){ S.gold+=S.dishes.shift(); addXp(3); render(); } else msg('売る料理がありません'); }
+
+function buy(id){ var b=BUY[id]; if(S.lv<b.lv){msg('Lv.'+b.lv+'で解放');return;}
+  if(b.kind==='up' && b.max && S.up[id]>=b.max){msg('最大レベルです');return;}
+  var c=cost(id); if(S.gold<c){msg('お金が足りません(あと '+fmt(c-S.gold)+')');return;}
+  S.gold-=c; if(b.kind==='fac') S.fac[id]++; else S.up[id]++; msg(b.name+' を強化しました'); render();
+}
+
+/* ===== 描画 ===== */
+function tabUnlocked(t){ return S.lv>=t.lv; }
+function renderTabs(){
+  var el=$('tabs'); el.innerHTML='';
+  TABS.forEach(function(t){
+    var b=document.createElement('button');
+    var un=tabUnlocked(t);
+    b.className='tab'+(tab===t.id?' active':'')+(un?'':' locked');
+    b.innerHTML = un ? t.name : (t.name+'<small>Lv.'+t.lv+'</small>');
+    b.onclick=function(){ if(!un){msg('Lv.'+t.lv+'で解放されます');return;} tab=t.id; render(); };
+    el.appendChild(b);
+  });
+}
+function chip(label,val){ return '<div class="chip">'+label+'<b>'+val+'</b></div>'; }
+function renderChips(){
+  var el=$('chips'),h='';
+  if(tab==='wood'){
+    h+=chip('原木',fmt(S.res.log))+chip('板材',fmt(S.res.plank))+chip('オガ炭',fmt(S.res.ogatan));
+    if(S.lv>=20) h+=chip('白炭',fmt(S.res.shirozumi));
+    if(S.lv>=35) h+=chip('備長炭',fmt(S.res.binchotan));
+    h+=chip('樹種倍率','×'+treeMult());
+  } else if(tab==='fish'){
+    FISH.forEach(function(f){ h+=chip(FISH_NAME[f],fmt(S.res[f])); });
+    h+=chip('干物',fmt(S.res.himono));
+  } else if(tab==='ore'){
+    var av=oreRanksAvail();
+    for(var i=0;i<av;i++) h+=chip(ORE_NAME[ORE[i]]+'鉱石',fmt(S.res[ORE[i]+'_ore']));
+    for(var i=0;i<ORE.length;i++) if(Math.floor(S.res[ORE[i]])>0) h+=chip(ORE_NAME[ORE[i]],fmt(S.res[ORE[i]]));
+    h+=chip('宝石',fmt(S.res.gem));
+  } else if(tab==='cook'){
+    h+=chip('調理済み',fmt(S.dishes.length))+chip('宝石',fmt(S.res.gem))+chip('火力',fmt(totalFuel()));
+  }
+  el.innerHTML=h;
+}
+function abtn(label,sub,fn,primary,disabled){
+  var b=document.createElement('button');
+  b.className='btn action'+(primary?' primary':''); if(disabled) b.disabled=true;
+  b.innerHTML=label+(sub?'<small>'+sub+'</small>':'');
+  b.onclick=fn; return b;
+}
+function renderActions(){
+  var el=$('actions'); el.innerHTML='';
+  if(tab==='wood'){
+    el.appendChild(abtn('木を切る','原木 +'+(1+S.up.axe),actChop,true));
+    el.appendChild(abtn('製材する','原木5→板材1',actProcess));
+    if(S.lv>=5) el.appendChild(abtn('炭を焼く','板材2→オガ炭1',actCharcoal));
+    el.appendChild(abtn('板材を売る',fmt(plankPrice())+'G',actSellPlank));
+  } else if(tab==='fish'){
+    el.appendChild(abtn('釣る','魚を1匹',actCast,true));
+    el.appendChild(abtn('干物にする','雑魚1→干物1',actDry));
+    el.appendChild(abtn('魚を売る','高い順に1',actSellFish));
+  } else if(tab==='ore'){
+    el.appendChild(abtn('採掘する','鉱石を1',actMine,true));
+    el.appendChild(abtn('製錬する','鉱石3+火力→ｲﾝｺﾞｯﾄ',actSmelt));
+    el.appendChild(abtn('ｲﾝｺﾞｯﾄを売る','高い順に1',actSellIngot));
+  } else if(tab==='cook'){
+    var rc=recipeById(S.cookSel);
+    el.appendChild(abtn('調理する',rc.name+' →'+fmt(rc.price*kanbanMult())+'G',actCook,true,!canCook(rc)));
+    el.appendChild(abtn('料理を売る',S.dishes.length?fmt(S.dishes[0])+'G':'なし',actSellDish));
+    renderRecipes();
+  }
+}
+function renderRecipes(){
+  var el=$('actions');
+  var wrap=document.createElement('div');
+  wrap.style.cssText='grid-column:1/3;display:flex;flex-direction:column;gap:6px;margin-top:4px';
+  RECIPES.forEach(function(rc){
+    var ins=Object.keys(rc.ins).map(function(k){var nm=FISH_NAME[k]||(k==='himono'?'干物':(k==='gem'?'宝石':(ORE_NAME[k]||k)));return nm+'×'+rc.ins[k];}).join(' ＋ ');
+    var b=document.createElement('button');
+    b.className='btn up'+(S.cookSel===rc.id?'':' dim');
+    b.innerHTML='<span><span class="name">'+rc.name+'</span>'+(S.cookSel===rc.id?' <span class="lv">選択中</span>':'')+
+      '<div class="desc">'+ins+' ＋ 火力'+rc.fuel+'</div></span><span class="price">'+fmt(rc.price*kanbanMult())+'G</span>';
+    b.onclick=function(){ S.cookSel=rc.id; render(); };
+    wrap.appendChild(b);
+  });
+  el.appendChild(wrap);
+}
+function renderShop(){
+  var el=$('shop'); el.innerHTML='';
+  for(var id in BUY){ var b=BUY[id]; if(b.tab!==tab) continue;
+    if(S.lv<b.lv) continue;
+    var lvl=(b.kind==='fac'?S.fac[id]:S.up[id]);
+    var maxed=(b.max && lvl>=b.max);
+    var c=cost(id), afford=(!maxed && S.gold>=c);
+    var row=document.createElement('button');
+    row.className='btn up'+(afford?'':' dim');
+    var extra = b.kind==='fac' ? ('（'+ (FAC[id].rate*(lvl+1)) +'/秒に）') : '';
+    row.innerHTML='<span><span class="name">'+b.name+'</span><span class="lv">Lv.'+lvl+'</span>'+
+      '<div class="desc">'+b.desc+'</div></span>'+
+      '<span class="price">'+(maxed?'MAX':fmt(c)+'G')+'</span>';
+    (function(id){ row.onclick=function(){ buy(id); }; })(id);
+    el.appendChild(row);
+  }
+}
+function renderTop(){
+  $('lv').textContent=S.lv; $('gold').textContent=fmt(S.gold);
+  var need=xpToNext(S.lv);
+  $('xpnow').textContent=fmt(S.xp); $('xpneed').textContent=fmt(need);
+  $('xpfill').style.width=Math.min(100,100*S.xp/need)+'%';
+  $('fuel').textContent=fmt(totalFuel());
+}
+function render(){ renderTop(); renderTabs(); renderChips(); renderActions(); renderShop(); }
+
+/* ===== セーブ ===== */
+function save(){ S.t=Date.now(); try{ localStorage.setItem(KEY,JSON.stringify(S)); $('saveState').textContent='保存済 '+new Date().toLocaleTimeString('ja-JP'); }catch(e){ $('saveState').textContent='保存不可'; } }
+function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return null; var d=JSON.parse(raw); var base=newState();
+  for(var k in base) if(!(k in d)) d[k]=base[k];
+  for(var k in base.res) if(!(k in d.res)) d.res[k]=0;
+  for(var k in base.fac) if(!(k in d.fac)) d.fac[k]=0;
+  for(var k in base.up) if(!(k in d.up)) d.up[k]=0;
+  d.acc=base.acc; return d; }catch(e){ return null; } }
+
+function offlineGains(){
+  var before=S.gold;
+  var el=Math.floor((Date.now()-S.t)/1000); el=Math.max(0,Math.min(el,60*60*8));
+  if(el<5) return;
+  for(var i=0;i<el;i++) step();
+  var dg=Math.floor(S.gold-before); if(dg<=0) return;
+  var m=Math.floor(el/60),s=el%60;
+  var o=$('offline'); o.style.display='block';
+  o.textContent='おかえりなさい！ 留守の '+(m>0?m+'分':'')+s+'秒 の間に自動で +'+dg.toLocaleString()+'G 稼ぎました';
+}
+
+/* ===== 起動 ===== */
+$('reset').onclick=function(){ if(!confirm('本当に最初からやり直しますか？ セーブは消えます。')) return; S=newState(); tab='wood'; $('offline').style.display='none'; msg('リセットしました'); render(); save(); };
+
+S=load()||newState();
+offlineGains();
+render();
+setInterval(function(){ step(); render(); },1000);
+setInterval(save,5000);
+window.addEventListener('beforeunload',save);
+document.addEventListener('visibilitychange',function(){ if(document.hidden) save(); });
+if('serviceWorker' in navigator){ window.addEventListener('load',function(){ navigator.serviceWorker.register('service-worker.js').catch(function(){}); }); }
+})();
+</script>
+</body>
+</html>
