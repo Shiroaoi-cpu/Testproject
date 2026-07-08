@@ -159,12 +159,11 @@ var TABS=[
 function newState(){
   var s={lv:1,xp:0,gold:0,dishes:[],cookSel:'yakizakana',t:Date.now(),
     res:{log:0,plank:0,ogatan:0,shirozumi:0,binchotan:0,himono:0,gem:0},
-    fac:{},up:{},acc:{}};
+    fac:{},up:{},acc:{},on:{}};
   FISH.forEach(function(f){s.res[f]=0;});
   ORE.forEach(function(o){s.res[o+'_ore']=0; s.res[o]=0;});
-  for(var k in FAC) s.fac[k]=0;
+  for(var k in FAC){ s.fac[k]=0; s.acc[k]=0; s.on[k]=true; }
   for(var k in BUY) if(BUY[k].kind==='up') s.up[k]=0;
-  for(var k in FAC) s.acc[k]=0;
   return s;
 }
 var S;
@@ -178,7 +177,7 @@ function msg(t){$('msg').textContent=t;}
 function treeMult(){return S.lv>=35?4:(S.lv>=15?2:1);}
 function plankPrice(){return (10+ S.up.hanro*5)*treeMult();}
 function kanbanMult(){return 1+0.1*S.up.kanban;}
-function xpToNext(lv){return Math.round(20*Math.pow(lv,1.7));}
+function xpToNext(lv){return Math.round(40*Math.pow(lv,2.2));}
 function totalFuel(){return S.res.ogatan*1 + S.res.shirozumi*3 + S.res.binchotan*5;}
 function rate(id){return FAC[id].rate * S.fac[id];}
 function cost(id){var b=BUY[id];var lvl=(b.kind==='fac'?S.fac[id]:S.up[id]);return Math.round(b.base*Math.pow(b.grow,lvl));}
@@ -191,6 +190,8 @@ function addXp(n){
     if(names[S.lv]) msg('Lv.'+S.lv+' 到達！ '+names[S.lv]+' が解放されました');
   }
 }
+/* 販売でのみ経験値が入る（＝稼いだGがそのままXP） */
+function earn(g){ S.gold+=g; addXp(g); }
 
 /* 火力支払い: 無駄が最小になるよう オガ炭優先→白炭→備長炭 */
 function payFuel(F){
@@ -237,56 +238,54 @@ function recipeById(id){for(var i=0;i<RECIPES.length;i++) if(RECIPES[i].id===id)
 
 /* ===== 自動処理 1tick(秒) ===== */
 function step(){
-  var f=S.fac, r=S.res, a=S.acc, u, i;
+  var f=S.fac, r=S.res, a=S.acc, on=S.on, u, i;
   function units(id){ a[id]+=rate(id); var n=Math.floor(a[id]); a[id]-=n; return n; }
 
-  if(f.kikori){ u=units('kikori'); r.log+=u; addXp(u); }
-  if(f.seizai){ u=Math.min(units('seizai'), Math.floor(r.log/5)); r.log-=5*u; r.plank+=u; addXp(2*u); }
-  if(f.sumiyaki){ u=Math.min(units('sumiyaki'), Math.floor(r.plank/2)); r.plank-=2*u; r.ogatan+=u; addXp(2*u); }
-  if(f.shirozumiK){ u=Math.min(units('shirozumiK'), Math.floor(r.plank/3)); r.plank-=3*u; r.shirozumi+=u; addXp(2*u); }
-  if(f.binchoK){ u=Math.min(units('binchoK'), Math.floor(r.plank/2)); r.plank-=2*u; r.binchotan+=u; addXp(2*u); }
-  if(f.gyosho){ u=Math.min(units('gyosho'), Math.floor(r.plank)); r.plank-=u; S.gold+=u*plankPrice(); addXp(3*u); }
+  if(f.kikori&&on.kikori){ u=units('kikori'); r.log+=u; }
+  if(f.seizai&&on.seizai){ u=Math.min(units('seizai'), Math.floor(r.log/5)); r.log-=5*u; r.plank+=u; }
+  if(f.sumiyaki&&on.sumiyaki){ u=Math.min(units('sumiyaki'), Math.floor(r.plank/2)); r.plank-=2*u; r.ogatan+=u; }
+  if(f.shirozumiK&&on.shirozumiK){ u=Math.min(units('shirozumiK'), Math.floor(r.plank/3)); r.plank-=3*u; r.shirozumi+=u; }
+  if(f.binchoK&&on.binchoK){ u=Math.min(units('binchoK'), Math.floor(r.plank/2)); r.plank-=2*u; r.binchotan+=u; }
+  if(f.gyosho&&on.gyosho){ u=Math.min(units('gyosho'), Math.floor(r.plank)); r.plank-=u; earn(u*plankPrice()); }
 
-  if(f.tsuribito){ u=units('tsuribito'); if(u>0){ var w=fishWeights(),sum=0; for(i=0;i<FISH.length;i++) sum+=w[FISH[i]];
-    for(i=0;i<FISH.length;i++) r[FISH[i]]+=u*w[FISH[i]]/sum; addXp(4*u); } }
-  if(f.himonodana){ u=Math.min(units('himonodana'), Math.floor(r.zako)); r.zako-=u; r.himono+=u; addXp(2*u); }
-  if(f.nakagai){ var cap=units('nakagai'),sold=0,k;
-    for(i=FISH.length-1;i>=0;i--){ k=Math.min(cap,Math.floor(r[FISH[i]])); r[FISH[i]]-=k; S.gold+=k*FISH_PRICE[FISH[i]]; cap-=k; sold+=k; }
-    k=Math.min(cap,Math.floor(r.himono)); r.himono-=k; S.gold+=k*HIMONO_PRICE; sold+=k; addXp(3*sold); }
+  if(f.tsuribito&&on.tsuribito){ u=units('tsuribito'); if(u>0){ var w=fishWeights(),sum=0; for(i=0;i<FISH.length;i++) sum+=w[FISH[i]];
+    for(i=0;i<FISH.length;i++) r[FISH[i]]+=u*w[FISH[i]]/sum; } }
+  if(f.himonodana&&on.himonodana){ u=Math.min(units('himonodana'), Math.floor(r.zako)); r.zako-=u; r.himono+=u; }
+  if(f.nakagai&&on.nakagai){ var cap=units('nakagai'),k;
+    for(i=FISH.length-1;i>=0;i--){ k=Math.min(cap,Math.floor(r[FISH[i]])); r[FISH[i]]-=k; earn(k*FISH_PRICE[FISH[i]]); cap-=k; }
+    k=Math.min(cap,Math.floor(r.himono)); r.himono-=k; earn(k*HIMONO_PRICE); }
 
-  if(f.sakugan){ u=units('sakugan'); if(u>0){ var av=oreRanksAvail(),ws=0; for(i=0;i<av;i++) ws+=(av-i);
-    for(i=0;i<av;i++) r[ORE[i]+'_ore']+=u*(av-i)/ws; r.gem+=u*0.01; addXp(6*u); } }
-  if(f.yokoro){ var capy=units('yokoro'),madey=0;
+  if(f.sakugan&&on.sakugan){ u=units('sakugan'); if(u>0){ var av=oreRanksAvail(),ws=0; for(i=0;i<av;i++) ws+=(av-i);
+    for(i=0;i<av;i++) r[ORE[i]+'_ore']+=u*(av-i)/ws; r.gem+=u*0.01; } }
+  if(f.yokoro&&on.yokoro){ var capy=units('yokoro');
     for(i=ORE.length-1;i>=0 && capy>=1;i--){ var oid=ORE[i];
       while(capy>=1 && Math.floor(r[oid+'_ore'])>=3 && totalFuel()>=SMELT_FUEL[oid]){
-        r[oid+'_ore']-=3; payFuel(SMELT_FUEL[oid]); r[oid]+=1; capy--; madey++; } }
-    addXp(8*madey); }
-  if(f.kinzokusho){ var capk=units('kinzokusho'),soldk=0,k2;
-    for(i=ORE.length-1;i>=0;i--){ k2=Math.min(capk,Math.floor(r[ORE[i]])); r[ORE[i]]-=k2; S.gold+=k2*INGOT_PRICE[ORE[i]]; capk-=k2; soldk+=k2; }
-    addXp(3*soldk); }
+        r[oid+'_ore']-=3; payFuel(SMELT_FUEL[oid]); r[oid]+=1; capy--; } } }
+  if(f.kinzokusho&&on.kinzokusho){ var capk=units('kinzokusho'),k2;
+    for(i=ORE.length-1;i>=0;i--){ k2=Math.min(capk,Math.floor(r[ORE[i]])); r[ORE[i]]-=k2; earn(k2*INGOT_PRICE[ORE[i]]); capk-=k2; } }
 
-  if(f.cook){ u=units('cook'); var rc=recipeById(S.cookSel); for(i=0;i<u;i++){ if(doCook(rc)) addXp(12); else break; } }
-  if(f.ryoriten){ var capd=units('ryoriten'); while(capd>=1 && S.dishes.length){ S.gold+=S.dishes.shift(); capd--; addXp(3); } }
+  if(f.cook&&on.cook){ u=units('cook'); var rc=recipeById(S.cookSel); for(i=0;i<u;i++){ if(!doCook(rc)) break; } }
+  if(f.ryoriten&&on.ryoriten){ var capd=units('ryoriten'); while(capd>=1 && S.dishes.length){ earn(S.dishes.shift()); capd--; } }
 }
 
 /* ===== 手動アクション ===== */
-function actChop(){ var g=(1+S.up.axe); S.res.log+=g; addXp(Math.ceil(1.5)); render(); }
-function actProcess(){ if(Math.floor(S.res.log)<5){msg('原木が足りません(5必要)');return;} S.res.log-=5; S.res.plank+=1; addXp(3); render(); }
-function actCharcoal(){ if(Math.floor(S.res.plank)<2){msg('板材が足りません(2必要)');return;} S.res.plank-=2; S.res.ogatan+=1; addXp(3); render(); }
-function actSellPlank(){ if(Math.floor(S.res.plank)<1){msg('板材がありません');return;} S.res.plank-=1; S.gold+=plankPrice(); addXp(4); render(); }
-function actCast(){ var r=pickFish(); S.res[r]+=1; addXp(6); msg((FISH_NAME[r])+'が釣れた！'); render(); }
-function actDry(){ if(Math.floor(S.res.zako)<1){msg('雑魚がありません');return;} S.res.zako-=1; S.res.himono+=1; addXp(3); render(); }
-function actSellFish(){ for(var i=FISH.length-1;i>=0;i--){ if(Math.floor(S.res[FISH[i]])>=1){ S.res[FISH[i]]-=1; S.gold+=FISH_PRICE[FISH[i]]; addXp(4); render(); return; } }
-  if(Math.floor(S.res.himono)>=1){ S.res.himono-=1; S.gold+=HIMONO_PRICE; addXp(4); render(); return; } msg('売る魚がありません'); }
+function actChop(){ var g=(1+S.up.axe); S.res.log+=g; render(); }
+function actProcess(){ if(Math.floor(S.res.log)<5){msg('原木が足りません(5必要)');return;} S.res.log-=5; S.res.plank+=1; render(); }
+function actCharcoal(){ if(Math.floor(S.res.plank)<2){msg('板材が足りません(2必要)');return;} S.res.plank-=2; S.res.ogatan+=1; render(); }
+function actSellPlank(){ if(Math.floor(S.res.plank)<1){msg('板材がありません');return;} S.res.plank-=1; earn(plankPrice()); render(); }
+function actCast(){ var r=pickFish(); S.res[r]+=1; msg((FISH_NAME[r])+'が釣れた！'); render(); }
+function actDry(){ if(Math.floor(S.res.zako)<1){msg('雑魚がありません');return;} S.res.zako-=1; S.res.himono+=1; render(); }
+function actSellFish(){ for(var i=FISH.length-1;i>=0;i--){ if(Math.floor(S.res[FISH[i]])>=1){ S.res[FISH[i]]-=1; earn(FISH_PRICE[FISH[i]]); render(); return; } }
+  if(Math.floor(S.res.himono)>=1){ S.res.himono-=1; earn(HIMONO_PRICE); render(); return; } msg('売る魚がありません'); }
 function actMine(){ var av=oreRanksAvail(),ws=0,i; for(i=0;i<av;i++) ws+=(av-i); var rr=Math.random()*ws,pick=0;
   for(i=0;i<av;i++){ rr-=(av-i); if(rr<=0){pick=i;break;} } S.res[ORE[pick]+'_ore']+=1;
-  if(Math.random()<0.01){ S.res.gem+=1; msg('宝石を発見！'); } addXp(6); render(); }
+  if(Math.random()<0.01){ S.res.gem+=1; msg('宝石を発見！'); } render(); }
 function actSmelt(){ for(var i=ORE.length-1;i>=0;i--){ var o=ORE[i];
-  if(Math.floor(S.res[o+'_ore'])>=3 && totalFuel()>=SMELT_FUEL[o]){ S.res[o+'_ore']-=3; payFuel(SMELT_FUEL[o]); S.res[o]+=1; addXp(8); msg(ORE_NAME[o]+'インゴットを製錬'); render(); return; } }
+  if(Math.floor(S.res[o+'_ore'])>=3 && totalFuel()>=SMELT_FUEL[o]){ S.res[o+'_ore']-=3; payFuel(SMELT_FUEL[o]); S.res[o]+=1; msg(ORE_NAME[o]+'インゴットを製錬'); render(); return; } }
   msg('製錬できる鉱石/火力が不足'); }
-function actSellIngot(){ for(var i=ORE.length-1;i>=0;i--){ if(Math.floor(S.res[ORE[i]])>=1){ S.res[ORE[i]]-=1; S.gold+=INGOT_PRICE[ORE[i]]; addXp(3); render(); return; } } msg('売るインゴットがありません'); }
-function actCook(){ var rc=recipeById(S.cookSel); if(doCook(rc)){ addXp(12); msg(rc.name+'を調理'); } else msg('素材か火力が足りません'); render(); }
-function actSellDish(){ if(S.dishes.length){ S.gold+=S.dishes.shift(); addXp(3); render(); } else msg('売る料理がありません'); }
+function actSellIngot(){ for(var i=ORE.length-1;i>=0;i--){ if(Math.floor(S.res[ORE[i]])>=1){ S.res[ORE[i]]-=1; earn(INGOT_PRICE[ORE[i]]); render(); return; } } msg('売るインゴットがありません'); }
+function actCook(){ var rc=recipeById(S.cookSel); if(doCook(rc)){ msg(rc.name+'を調理'); } else msg('素材か火力が足りません'); render(); }
+function actSellDish(){ if(S.dishes.length){ earn(S.dishes.shift()); render(); } else msg('売る料理がありません'); }
 
 function buy(id){ var b=BUY[id]; if(S.lv<b.lv){msg('Lv.'+b.lv+'で解放');return;}
   if(b.kind==='up' && b.max && S.up[id]>=b.max){msg('最大レベルです');return;}
@@ -360,11 +359,17 @@ function renderRecipes(){
   var el=$('actions');
   var wrap=document.createElement('div');
   wrap.style.cssText='grid-column:1/3;display:flex;flex-direction:column;gap:6px;margin-top:4px';
+  var hint=document.createElement('div');
+  hint.style.cssText='font-size:12px;color:var(--muted);margin:2px 0 2px';
+  hint.textContent='レシピをタップで選択 → 上の「調理する」で作れます';
+  wrap.appendChild(hint);
   RECIPES.forEach(function(rc){
     var ins=Object.keys(rc.ins).map(function(k){var nm=FISH_NAME[k]||(k==='himono'?'干物':(k==='gem'?'宝石':(ORE_NAME[k]||k)));return nm+'×'+rc.ins[k];}).join(' ＋ ');
+    var sel=(S.cookSel===rc.id);
     var b=document.createElement('button');
-    b.className='btn up'+(S.cookSel===rc.id?'':' dim');
-    b.innerHTML='<span><span class="name">'+rc.name+'</span>'+(S.cookSel===rc.id?' <span class="lv">選択中</span>':'')+
+    b.className='btn up'+(sel?'':' dim');
+    if(sel) b.style.cssText='border-color:var(--gold);background:#3a2e1e';
+    b.innerHTML='<span><span class="name">'+(sel?'▶ ':'')+rc.name+'</span>'+(sel?' <span class="lv" style="color:var(--gold)">選択中</span>':'')+
       '<div class="desc">'+ins+' ＋ 火力'+rc.fuel+'</div></span><span class="price">'+fmt(rc.price*kanbanMult())+'G</span>';
     b.onclick=function(){ S.cookSel=rc.id; render(); };
     wrap.appendChild(b);
@@ -378,13 +383,22 @@ function renderShop(){
     var lvl=(b.kind==='fac'?S.fac[id]:S.up[id]);
     var maxed=(b.max && lvl>=b.max);
     var c=cost(id), afford=(!maxed && S.gold>=c);
-    var row=document.createElement('button');
-    row.className='btn up'+(afford?'':' dim');
-    var extra = b.kind==='fac' ? ('（'+ (FAC[id].rate*(lvl+1)) +'/秒に）') : '';
-    row.innerHTML='<span><span class="name">'+b.name+'</span><span class="lv">Lv.'+lvl+'</span>'+
+    var row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;align-items:stretch';
+    var up=document.createElement('button');
+    up.className='btn up'+(afford?'':' dim'); up.style.flex='1';
+    up.innerHTML='<span><span class="name">'+b.name+'</span><span class="lv">Lv.'+lvl+'</span>'+
       '<div class="desc">'+b.desc+'</div></span>'+
       '<span class="price">'+(maxed?'MAX':fmt(c)+'G')+'</span>';
-    (function(id){ row.onclick=function(){ buy(id); }; })(id);
+    (function(id){ up.onclick=function(){ buy(id); }; })(id);
+    row.appendChild(up);
+    if(b.kind==='fac' && lvl>0){
+      var onx=S.on[id];
+      var tg=document.createElement('button');
+      tg.className='btn'; tg.style.cssText='width:58px;font-size:12px;font-weight:600;border-radius:13px;color:'+(onx?'var(--green)':'var(--muted)');
+      tg.textContent=onx?'稼働':'停止';
+      (function(id){ tg.onclick=function(){ S.on[id]=!S.on[id]; render(); }; })(id);
+      row.appendChild(tg);
+    }
     el.appendChild(row);
   }
 }
@@ -404,6 +418,7 @@ function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return null; v
   for(var k in base.res) if(!(k in d.res)) d.res[k]=0;
   for(var k in base.fac) if(!(k in d.fac)) d.fac[k]=0;
   for(var k in base.up) if(!(k in d.up)) d.up[k]=0;
+  if(!d.on) d.on={}; for(var k in base.on) if(!(k in d.on)) d.on[k]=true;
   d.acc=base.acc; return d; }catch(e){ return null; } }
 
 function offlineGains(){
