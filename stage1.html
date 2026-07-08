@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14110e">
+<title>木こりの森 — ステージ1</title>
+<style>
+  :root{--bg:#14110e;--surface:#211b16;--surface2:#2c241d;--text:#f0e9e0;--muted:#b8a892;
+    --gold:#e6b23c;--green:#5cc27a;--border:rgba(255,255,255,.09);--border-strong:rgba(255,255,255,.18)}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",Roboto,sans-serif;overscroll-behavior:none}
+  body{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 10px) 10px calc(env(safe-area-inset-bottom) + 16px)}
+  h1{font-size:16px;font-weight:600;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  h1 .dot{width:9px;height:9px;border-radius:50%;background:var(--green)}
+  .hud{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+  .stat{background:var(--surface);border-radius:12px;padding:8px 10px}
+  .stat .l{font-size:11px;color:var(--muted)}
+  .stat .v{font-size:19px;font-weight:600}
+  .stat .v.g{color:var(--gold)}
+  .scene{border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px}
+  canvas{display:block;width:100%;height:auto}
+  .chop{width:100%;height:60px;border:1px solid rgba(230,178,60,.5);background:#3a2e1e;color:var(--gold);
+    border-radius:14px;font-family:inherit;font-size:17px;font-weight:600;cursor:pointer;margin-bottom:10px;transition:transform .05s}
+  .chop:active{transform:scale(.98)}
+  .shop{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .up{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;text-align:left;
+    border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);border-radius:12px;font-family:inherit;cursor:pointer;transition:transform .05s}
+  .up:active{transform:scale(.97)}
+  .up.dim{opacity:.5}
+  .up .n{font-weight:600;font-size:14px}
+  .up .lv{font-size:11px;color:var(--muted);margin-left:5px}
+  .up .p{font-weight:600;color:var(--gold);font-size:13px;white-space:nowrap}
+  .foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+  .msg{font-size:12px;color:var(--green);min-height:16px}
+  .save{font-size:11px;color:var(--muted)}
+  .rst{height:30px;font-size:11px;padding:0 12px;border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);border-radius:10px;font-family:inherit;cursor:pointer}
+  .off{display:none;background:rgba(92,194,122,.14);border:1px solid rgba(92,194,122,.3);border-radius:12px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:var(--green)}
+</style>
+</head>
+<body>
+  <h1><span class="dot"></span> 木こりの森 — ステージ1「平和な森」</h1>
+
+  <div class="off" id="off"></div>
+
+  <div class="hud">
+    <div class="stat"><div class="l">丸太</div><div class="v" id="hLogs">0</div></div>
+    <div class="stat"><div class="l">板材</div><div class="v" id="hPlanks">0</div></div>
+    <div class="stat"><div class="l">お金</div><div class="v g" id="hGold">0</div></div>
+  </div>
+
+  <div class="scene"><canvas id="cv" width="400" height="300"></canvas></div>
+
+  <button class="chop" id="chop">木を切る</button>
+
+  <div class="shop" id="shop"></div>
+
+  <div class="foot">
+    <div class="msg" id="msg"></div>
+    <div style="display:flex;gap:8px;align-items:center"><span class="save" id="save"></span><button class="rst" id="rst">リセット</button></div>
+  </div>
+
+<script>
+(function(){
+"use strict";
+var KEY='kikori_stage1_v1';
+var $=function(id){return document.getElementById(id);};
+function fmt(n){return Math.floor(n).toLocaleString();}
+function msg(t){$('msg').textContent=t;}
+
+/* ===== 状態 ===== */
+function newG(){return {logs:0,planks:0,gold:0,axeLv:1,workers:0,millLv:1,shopLv:1,t:Date.now()};}
+var G=newG();
+
+var BUY={
+  axe:{n:'鋭い斧',d:'木を切る量+1',base:25,grow:1.6},
+  worker:{n:'木こりを雇う',d:'自動で木を切って運ぶ',base:60,grow:1.8},
+  mill:{n:'製材所',d:'丸太→板材を速く',base:100,grow:1.7},
+  shop:{n:'お店',d:'板材の販売を速く',base:140,grow:1.7}
+};
+function lvOf(id){return id==='axe'?G.axeLv:id==='worker'?G.workers:id==='mill'?G.millLv:G.shopLv;}
+function cost(id){return Math.round(BUY[id].base*Math.pow(BUY[id].grow,lvOf(id)));}
+
+/* ===== 経済（毎秒の建物処理） ===== */
+var millAcc=0, shopAcc=0;
+function buildings(dt){
+  millAcc+=0.5*G.millLv*dt;
+  while(millAcc>=1 && G.logs>=2){ G.logs-=2; G.planks+=1; millAcc-=1; spawnPlank(); }
+  shopAcc+=0.5*G.shopLv*dt;
+  while(shopAcc>=1 && G.planks>=1){ G.planks-=1; G.gold+=10; shopAcc-=1; spawnCoin(); }
+}
+
+/* ===== シーン（Canvas） ===== */
+var cv=$('cv'), x=cv.getContext('2d'), W=400, Hc=300, ground=205;
+var xTree=285, xMill=150, plankPile={x:92,y:188}, goldHud={x:26,y:16};
+var hero={x:242, swing:0, chopping:0};
+var workers=[]; // {x,dir,state,swing,chop,carry}
+var parts=[], pops=[], treeShake=0, tick=0;
+
+function ensureWorkers(){
+  while(workers.length<G.workers) workers.push({x:xMill,state:'toTree',swing:0,chop:0,carry:false});
+  while(workers.length>G.workers) workers.pop();
+}
+function spawnLogFly(fromx){ parts.push({t:'log',x:fromx,y:ground-30,tx:xMill+8,ty:ground-18,r:0}); }
+function spawnPlank(){ parts.push({t:'plank',x:xMill,y:ground-20,tx:plankPile.x,ty:plankPile.y,r:0}); }
+function spawnCoin(){ parts.push({t:'coin',x:38,y:ground-24,tx:goldHud.x,ty:goldHud.y,r:0}); }
+function pop(txt,px,py){ pops.push({txt:txt,x:px,y:py,a:1}); }
+
+/* --- 描画部品（アート差し替えはこの関数群を drawImage に置換）--- */
+function drawTree(cx,base,shake){
+  x.save(); x.translate(cx,0); x.rotate(Math.sin(shake)*0.03);
+  x.fillStyle='#6b4a2b'; x.fillRect(-6,base-42,12,42);
+  var g=['#256b41','#2f7d4f','#3a9160'];
+  for(var i=0;i<3;i++){ x.fillStyle=g[i]; x.beginPath(); x.arc(0,base-52-i*13,24-i*5,0,7); x.fill(); }
+  x.restore();
+}
+function drawWoodman(px,base,swing,color){
+  x.fillStyle=color; x.fillRect(px-8,base-30,16,24);
+  x.fillStyle='#f0d0a8'; x.beginPath(); x.arc(px,base-37,8,0,7); x.fill();
+  var a=-0.6+Math.sin(swing)*0.9;
+  x.save(); x.translate(px+6,base-24); x.rotate(a);
+  x.strokeStyle='#8a5a34'; x.lineWidth=3; x.beginPath(); x.moveTo(0,0); x.lineTo(18,0); x.stroke();
+  x.fillStyle='#c9ccd1'; x.beginPath(); x.moveTo(16,-3); x.lineTo(25,-8); x.lineTo(27,1); x.lineTo(18,4); x.fill();
+  x.restore();
+}
+function drawCarrier(px,base,color){
+  x.fillStyle=color; x.fillRect(px-8,base-30,16,24);
+  x.fillStyle='#f0d0a8'; x.beginPath(); x.arc(px,base-37,8,0,7); x.fill();
+  x.fillStyle='#b5804a'; x.fillRect(px-12,base-26,10,6); // 抱えた丸太
+}
+function drawMill(){
+  x.fillStyle='#7a5236'; x.fillRect(xMill-40,ground-46,80,46);
+  x.fillStyle='#5f3f28'; x.beginPath(); x.moveTo(xMill-46,ground-46); x.lineTo(xMill+46,ground-46); x.lineTo(xMill,ground-70); x.fill();
+  x.fillStyle='#f0e9e0'; x.font='11px sans-serif'; x.textAlign='center'; x.fillText('製材所 Lv'+G.millLv,xMill,ground-22);
+  // 丸太の山
+  x.fillStyle='#b5804a'; for(var i=0;i<Math.min(4,Math.ceil(G.logs/3));i++) x.fillRect(xMill+30,ground-8-i*7,14,6);
+}
+function drawShop(){
+  var sx=44;
+  x.fillStyle='#b06a2e'; x.fillRect(sx-26,ground-42,52,42);
+  x.fillStyle='#e6b23c'; x.fillRect(sx-18,ground-30,36,14);
+  x.fillStyle='#f0e9e0'; x.font='11px sans-serif'; x.textAlign='center'; x.fillText('お店 Lv'+G.shopLv,sx,ground-2);
+  // 板材の山
+  x.fillStyle='#d8b483'; for(var i=0;i<Math.min(4,Math.ceil(G.planks/2));i++) x.fillRect(plankPile.x-6,plankPile.y+i*5,20,4);
+}
+function draw(){
+  x.clearRect(0,0,W,Hc);
+  x.fillStyle='#9fd0e0'; x.fillRect(0,0,W,ground); // 空
+  x.fillStyle='#c7e59a'; x.beginPath(); x.arc(330,60,80,0,7); x.fill(); // 遠景の丘っぽく
+  x.fillStyle='#3f7d4b'; x.fillRect(0,ground,W,Hc-ground); // 地面
+  x.fillStyle='#4a9159'; x.fillRect(0,ground,W,6);
+
+  drawShop(); drawMill();
+  drawTree(xTree,ground+2,treeShake);
+  drawTree(xTree+38,ground+2,treeShake*0.6);
+
+  // 主人公
+  drawWoodman(hero.x,ground,hero.swing,'#c86b3c');
+  if(hero.chopping>0){ hero.chopping--; }
+
+  // 作業員
+  for(var i=0;i<workers.length;i++){ var w=workers[i];
+    if(w.carry && w.state==='toMill') drawCarrier(w.x,ground,'#4a78c0');
+    else drawWoodman(w.x,ground,w.swing,'#4a78c0');
+  }
+
+  // パーティクル
+  for(var i=parts.length-1;i>=0;i--){ var p=parts[i];
+    p.x+=(p.tx-p.x)*0.14; p.y+=(p.ty-p.y)*0.14; p.r+=0.3;
+    x.save(); x.translate(p.x,p.y); x.rotate(p.r);
+    if(p.t==='coin'){ x.fillStyle='#e6b23c'; x.beginPath(); x.arc(0,0,6,0,7); x.fill(); }
+    else if(p.t==='plank'){ x.fillStyle='#d8b483'; x.fillRect(-9,-3,18,6); }
+    else { x.fillStyle='#b5804a'; x.fillRect(-8,-4,16,8); }
+    x.restore();
+    if(Math.abs(p.tx-p.x)<3 && Math.abs(p.ty-p.y)<3) parts.splice(i,1);
+  }
+  // ポップ文字
+  x.textAlign='left';
+  for(var j=pops.length-1;j>=0;j--){ var q=pops[j]; q.y-=0.7; q.a-=0.02;
+    x.save(); x.globalAlpha=Math.max(0,q.a); x.fillStyle='#ffe08a'; x.font='bold 15px sans-serif'; x.fillText(q.txt,q.x,q.y); x.restore();
+    if(q.a<=0) pops.splice(j,1);
+  }
+  if(treeShake>0) treeShake*=0.9;
+}
+
+/* ===== 更新 ===== */
+function updateWorkers(dt){
+  var sp=58*dt;
+  for(var i=0;i<workers.length;i++){ var w=workers[i];
+    if(w.state==='toTree'){ w.x+=sp; w.swing+=dt*6; if(w.x>=xTree){ w.x=xTree; w.state='chop'; w.chop=1.2; } }
+    else if(w.state==='chop'){ w.swing+=dt*10; w.chop-=dt; if(w.chop<=0){ w.carry=true; w.state='toMill'; treeShake=1; } }
+    else if(w.state==='toMill'){ w.x-=sp; if(w.x<=xMill){ w.x=xMill; w.carry=false; w.state='toTree'; pop('+1',xMill-4,ground-40); } }
+  }
+}
+function loop(ts){
+  var dt=Math.min(0.05,((ts-loop.last)||16)/1000); loop.last=ts; tick++;
+  hero.swing+= (hero.chopping>0? dt*14 : dt*1.5);
+  updateWorkers(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+loop.last=0;
+/* 経済処理はアニメと切り離してタイマーで回す（背景でも進行・堅牢）*/
+function logicTick(){ var dt=0.2; if(G.workers) G.logs+=G.workers*0.25*dt; buildings(dt); hud(); }
+
+function hud(){
+  $('hLogs').textContent=fmt(G.logs); $('hPlanks').textContent=fmt(G.planks); $('hGold').textContent=fmt(G.gold);
+  renderShop();
+}
+function renderShop(){
+  var el=$('shop'); el.innerHTML='';
+  for(var id in BUY){ (function(id){ var b=BUY[id], c=cost(id), afford=G.gold>=c;
+    var btn=document.createElement('button'); btn.className='up'+(afford?'':' dim');
+    btn.innerHTML='<span><span class="n">'+b.n+'</span><span class="lv">'+(id==='worker'?('×'+G.workers):('Lv'+lvOf(id)))+'</span><div style="font-size:11px;color:var(--muted);margin-top:2px">'+b.d+'</div></span><span class="p">'+fmt(c)+'G</span>';
+    btn.onclick=function(){ buy(id); };
+    el.appendChild(btn);
+  })(id); }
+}
+function buy(id){ var c=cost(id); if(G.gold<c){ msg('お金が足りません（あと '+fmt(c-G.gold)+'）'); return; }
+  G.gold-=c;
+  if(id==='axe') G.axeLv++; else if(id==='worker'){ G.workers++; ensureWorkers(); } else if(id==='mill') G.millLv++; else G.shopLv++;
+  msg(BUY[id].n+' を強化しました'); hud();
+}
+
+$('chop').onclick=function(){ G.logs+=G.axeLv; hero.chopping=12; treeShake=1; spawnLogFly(xTree); pop('+'+G.axeLv,xTree-6,ground-46); hud(); };
+$('rst').onclick=function(){ if(!confirm('最初からやり直しますか？ セーブは消えます。')) return; G=newG(); ensureWorkers(); $('off').style.display='none'; msg('リセットしました'); hud(); save(); };
+
+/* ===== セーブ・オフライン ===== */
+function save(){ G.t=Date.now(); try{ localStorage.setItem(KEY,JSON.stringify(G)); $('save').textContent='保存済 '+new Date().toLocaleTimeString('ja-JP'); }catch(e){ $('save').textContent='保存不可'; } }
+function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return null; var d=JSON.parse(raw); var b=newG(); for(var k in b) if(!(k in d)) d[k]=b[k]; return d; }catch(e){ return null; } }
+function offline(){
+  var before=G.gold;
+  var el=Math.floor((Date.now()-G.t)/1000); el=Math.max(0,Math.min(el,60*60*8));
+  if(el<5) return;
+  var osec=Math.round(el*2/3); // オフラインは2/3速度
+  for(var i=0;i<osec;i++){ G.logs+=G.workers*0.25; buildingsSecond(); }
+  var dg=Math.floor(G.gold-before); if(dg<=0) return;
+  var m=Math.floor(el/60),s=el%60; var o=$('off'); o.style.display='block';
+  o.textContent='おかえりなさい！ 留守の '+(m>0?m+'分':'')+s+'秒 の間に自動で +'+dg.toLocaleString()+'G（オフラインは2/3速度）';
+}
+function buildingsSecond(){
+  millAcc+=0.5*G.millLv; while(millAcc>=1 && G.logs>=2){ G.logs-=2; G.planks+=1; millAcc-=1; }
+  shopAcc+=0.5*G.shopLv; while(shopAcc>=1 && G.planks>=1){ G.planks-=1; G.gold+=10; shopAcc-=1; }
+}
+
+/* ===== 起動 ===== */
+G=load()||newG();
+ensureWorkers();
+offline();
+hud();
+requestAnimationFrame(loop);
+setInterval(logicTick,200);
+setInterval(save,5000);
+window.addEventListener('beforeunload',save);
+document.addEventListener('visibilitychange',function(){ if(document.hidden) save(); });
+})();
+</script>
+</body>
+</html>
