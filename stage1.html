@@ -21,9 +21,14 @@
   .stat .v.g{color:var(--gold)}
   .scene{border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px}
   canvas{display:block;width:100%;height:auto}
-  .chop{width:100%;height:60px;border:1px solid rgba(230,178,60,.5);background:#3a2e1e;color:var(--gold);
-    border-radius:14px;font-family:inherit;font-size:17px;font-weight:600;cursor:pointer;margin-bottom:10px;transition:transform .05s}
-  .chop:active{transform:scale(.98)}
+  .acts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .act{height:66px;border:1px solid rgba(230,178,60,.5);background:#3a2e1e;color:var(--gold);
+    border-radius:14px;font-family:inherit;font-weight:600;cursor:pointer;transition:transform .05s;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px}
+  .act:active{transform:scale(.97)}
+  .act .t{font-size:15px}
+  .act small{font-size:10px;font-weight:400;color:#d8b88a}
+  .act:disabled{opacity:.4;cursor:default}
   .shop{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
   .up{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;text-align:left;
     border:1px solid var(--border-strong);background:var(--surface2);color:var(--text);border-radius:12px;font-family:inherit;cursor:pointer;transition:transform .05s}
@@ -52,7 +57,11 @@
 
   <div class="scene"><canvas id="cv" width="400" height="300"></canvas></div>
 
-  <button class="chop" id="chop">木を切る</button>
+  <div class="acts">
+    <button class="act" id="bChop"><span class="t">木を切る</span><small id="sChop">原木 +1</small></button>
+    <button class="act" id="bProc"><span class="t">製材する</span><small>原木2→板材1</small></button>
+    <button class="act" id="bSell"><span class="t">売る</span><small>板材1→10G</small></button>
+  </div>
 
   <div class="shop" id="shop"></div>
 
@@ -70,14 +79,14 @@ function fmt(n){return Math.floor(n).toLocaleString();}
 function msg(t){$('msg').textContent=t;}
 
 /* ===== 状態 ===== */
-function newG(){return {logs:0,planks:0,gold:0,axeLv:1,workers:0,millLv:1,shopLv:1,t:Date.now()};}
+function newG(){return {logs:0,planks:0,gold:0,axeLv:1,workers:0,millLv:0,shopLv:0,t:Date.now()};}
 var G=newG();
 
 var BUY={
   axe:{n:'鋭い斧',d:'木を切る量+1',base:25,grow:1.6},
-  worker:{n:'木こりを雇う',d:'自動で木を切って運ぶ',base:60,grow:1.8},
-  mill:{n:'製材所',d:'丸太→板材を速く',base:100,grow:1.7},
-  shop:{n:'お店',d:'板材の販売を速く',base:140,grow:1.7}
+  worker:{n:'木こりを雇う',d:'自動で伐採（原木を集める）',base:60,grow:1.8},
+  mill:{n:'製材所',d:'自動で製材（原木→板材）',base:120,grow:1.8},
+  shop:{n:'行商人',d:'自動で販売（板材→お金）',base:200,grow:1.8}
 };
 function lvOf(id){return id==='axe'?G.axeLv:id==='worker'?G.workers:id==='mill'?G.millLv:G.shopLv;}
 function cost(id){return Math.round(BUY[id].base*Math.pow(BUY[id].grow,lvOf(id)));}
@@ -85,10 +94,10 @@ function cost(id){return Math.round(BUY[id].base*Math.pow(BUY[id].grow,lvOf(id))
 /* ===== 経済（毎秒の建物処理） ===== */
 var millAcc=0, shopAcc=0;
 function buildings(dt){
-  millAcc+=0.5*G.millLv*dt;
-  while(millAcc>=1 && G.logs>=2){ G.logs-=2; G.planks+=1; millAcc-=1; spawnPlank(); }
-  shopAcc+=0.5*G.shopLv*dt;
-  while(shopAcc>=1 && G.planks>=1){ G.planks-=1; G.gold+=10; shopAcc-=1; spawnCoin(); }
+  if(G.millLv){ millAcc+=0.25*G.millLv*dt;
+    while(millAcc>=1 && G.logs>=2){ G.logs-=2; G.planks+=1; millAcc-=1; spawnPlank(); } }
+  if(G.shopLv){ shopAcc+=0.3*G.shopLv*dt;
+    while(shopAcc>=1 && G.planks>=1){ G.planks-=1; G.gold+=10; shopAcc-=1; spawnCoin(); } }
 }
 
 /* ===== シーン（Canvas） ===== */
@@ -202,10 +211,13 @@ function loop(ts){
 }
 loop.last=0;
 /* 経済処理はアニメと切り離してタイマーで回す（背景でも進行・堅牢）*/
-function logicTick(){ var dt=0.2; if(G.workers) G.logs+=G.workers*0.25*dt; buildings(dt); hud(); }
+function logicTick(){ var dt=0.2; if(G.workers) G.logs+=G.workers*1.0*dt; buildings(dt); hud(); }
 
 function hud(){
   $('hLogs').textContent=fmt(G.logs); $('hPlanks').textContent=fmt(G.planks); $('hGold').textContent=fmt(G.gold);
+  $('sChop').textContent='原木 +'+G.axeLv;
+  $('bProc').disabled = G.logs<2;
+  $('bSell').disabled = G.planks<1;
   renderShop();
 }
 function renderShop(){
@@ -223,7 +235,9 @@ function buy(id){ var c=cost(id); if(G.gold<c){ msg('お金が足りません（
   msg(BUY[id].n+' を強化しました'); hud();
 }
 
-$('chop').onclick=function(){ G.logs+=G.axeLv; hero.chopping=12; treeShake=1; spawnLogFly(xTree); pop('+'+G.axeLv,xTree-6,ground-46); hud(); };
+$('bChop').onclick=function(){ G.logs+=G.axeLv; hero.chopping=12; treeShake=1; spawnLogFly(xTree); pop('+'+G.axeLv,xTree-6,ground-46); hud(); };
+$('bProc').onclick=function(){ if(G.logs<2){ msg('原木が足りません（2必要）'); return; } G.logs-=2; G.planks+=1; spawnPlank(); hud(); };
+$('bSell').onclick=function(){ if(G.planks<1){ msg('板材がありません'); return; } G.planks-=1; G.gold+=10; spawnCoin(); pop('+10',44,ground-46); hud(); };
 $('rst').onclick=function(){ if(!confirm('最初からやり直しますか？ セーブは消えます。')) return; G=newG(); ensureWorkers(); $('off').style.display='none'; msg('リセットしました'); hud(); save(); };
 
 /* ===== セーブ・オフライン ===== */
@@ -234,14 +248,14 @@ function offline(){
   var el=Math.floor((Date.now()-G.t)/1000); el=Math.max(0,Math.min(el,60*60*8));
   if(el<5) return;
   var osec=Math.round(el*2/3); // オフラインは2/3速度
-  for(var i=0;i<osec;i++){ G.logs+=G.workers*0.25; buildingsSecond(); }
+  for(var i=0;i<osec;i++){ G.logs+=G.workers*1.0; buildingsSecond(); }
   var dg=Math.floor(G.gold-before); if(dg<=0) return;
   var m=Math.floor(el/60),s=el%60; var o=$('off'); o.style.display='block';
   o.textContent='おかえりなさい！ 留守の '+(m>0?m+'分':'')+s+'秒 の間に自動で +'+dg.toLocaleString()+'G（オフラインは2/3速度）';
 }
 function buildingsSecond(){
-  millAcc+=0.5*G.millLv; while(millAcc>=1 && G.logs>=2){ G.logs-=2; G.planks+=1; millAcc-=1; }
-  shopAcc+=0.5*G.shopLv; while(shopAcc>=1 && G.planks>=1){ G.planks-=1; G.gold+=10; shopAcc-=1; }
+  if(G.millLv){ millAcc+=0.25*G.millLv; while(millAcc>=1 && G.logs>=2){ G.logs-=2; G.planks+=1; millAcc-=1; } }
+  if(G.shopLv){ shopAcc+=0.3*G.shopLv; while(shopAcc>=1 && G.planks>=1){ G.planks-=1; G.gold+=10; shopAcc-=1; } }
 }
 
 /* ===== 起動 ===== */
