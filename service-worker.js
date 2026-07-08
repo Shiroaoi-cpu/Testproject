@@ -1,4 +1,4 @@
-var CACHE = 'kikori-mori-v4';
+var CACHE = 'kikori-mori-v5';
 var ASSETS = [
   'index.html',
   'manifest.json',
