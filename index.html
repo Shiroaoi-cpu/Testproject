@@ -255,7 +255,7 @@ function doCook(rc){
   if(!canCook(rc)) return false;
   for(var k in rc.ins) S.res[k]-=rc.ins[k];
   if(!payFuel(rc.fuel)){ for(var k in rc.ins) S.res[k]+=rc.ins[k]; return false; }
-  S.dishes.push(Math.round(rc.price*kanbanMult()));
+  S.dishes.push({id:rc.id, val:Math.round(rc.price*kanbanMult())});
   return true;
 }
 function recipeById(id){for(var i=0;i<RECIPES.length;i++) if(RECIPES[i].id===id) return RECIPES[i]; return RECIPES[0];}
@@ -289,7 +289,7 @@ function step(){
     for(i=ORE.length-1;i>=0;i--){ k2=Math.min(capk,Math.floor(r[ORE[i]])); r[ORE[i]]-=k2; earn(k2*INGOT_PRICE[ORE[i]]); capk-=k2; } }
 
   if(f.cook&&on.cook){ u=units('cook'); var rc=recipeById(S.cookSel); for(i=0;i<u;i++){ if(!doCook(rc)) break; } }
-  if(f.ryoriten&&on.ryoriten){ var capd=units('ryoriten'); while(capd>=1 && S.dishes.length){ earn(S.dishes.shift()); capd--; } }
+  if(f.ryoriten&&on.ryoriten){ var capd=units('ryoriten'); while(capd>=1 && S.dishes.length){ earn(S.dishes.shift().val); capd--; } }
 }
 
 /* ===== 手動アクション ===== */
@@ -309,7 +309,8 @@ function actSmelt(){ for(var i=ORE.length-1;i>=0;i--){ var o=ORE[i];
   msg('製錬できる鉱石/火力が不足'); }
 function actSellIngot(){ for(var i=ORE.length-1;i>=0;i--){ if(Math.floor(S.res[ORE[i]])>=1){ S.res[ORE[i]]-=1; earn(INGOT_PRICE[ORE[i]]); render(); return; } } msg('売るインゴットがありません'); }
 function actCook(){ var rc=recipeById(S.cookSel); if(doCook(rc)){ msg(rc.name+'を調理'); } else msg('素材か火力が足りません'); render(); }
-function actSellDish(){ if(S.dishes.length){ earn(S.dishes.shift()); render(); } else msg('売る料理がありません'); }
+function actSellDish(){ if(S.dishes.length){ var d=S.dishes.shift(); earn(d.val); msg((dishName(d.id))+'を'+fmt(d.val)+'Gで販売'); render(); } else msg('売る料理がありません'); }
+function dishName(id){ if(id==='_'||!id) return '料理'; for(var i=0;i<RECIPES.length;i++) if(RECIPES[i].id===id) return RECIPES[i].name; return '料理'; }
 
 function buy(id){ var b=BUY[id]; if(S.lv<b.lv){msg('Lv.'+b.lv+'で解放');return;}
   if(b.kind==='up' && b.max && S.up[id]>=b.max){msg('最大レベルです');return;}
@@ -347,7 +348,7 @@ function renderChips(){
     for(var i=0;i<ORE.length;i++) if(Math.floor(S.res[ORE[i]])>0) h+=chip(ORE_NAME[ORE[i]],fmt(S.res[ORE[i]]));
     h+=chip('宝石',fmt(S.res.gem));
   } else if(tab==='cook'){
-    h+=chip('調理済み',fmt(S.dishes.length))+chip('宝石',fmt(S.res.gem))+chip('火力',fmt(totalFuel()));
+    h+=chip('宝石',fmt(S.res.gem))+chip('火力',fmt(totalFuel()));
   }
   el.innerHTML=h;
 }
@@ -375,9 +376,32 @@ function renderActions(){
   } else if(tab==='cook'){
     var rc=recipeById(S.cookSel);
     el.appendChild(abtn('調理する',rc.name+' →'+fmt(rc.price*kanbanMult())+'G',actCook,true,!canCook(rc)));
-    el.appendChild(abtn('料理を売る',S.dishes.length?fmt(S.dishes[0])+'G':'なし',actSellDish));
+    var front=S.dishes[0];
+    el.appendChild(abtn('料理を売る',front?dishName(front.id)+' '+fmt(front.val)+'G':'なし',actSellDish,false,!front));
+    renderDishStock();
     renderRecipes();
   }
+}
+function renderDishStock(){
+  var el=$('actions');
+  var agg={}, order=[], total=0;
+  S.dishes.forEach(function(d){ var id=d.id||'_'; if(!(id in agg)){agg[id]={n:0,sum:0}; order.push(id);} agg[id].n++; agg[id].sum+=d.val; total+=d.val; });
+  var wrap=document.createElement('div');
+  wrap.style.cssText='grid-column:1/3;background:var(--surface);border-radius:12px;padding:10px 12px;margin-top:4px';
+  var head=document.createElement('div');
+  head.style.cssText='font-size:12px;color:var(--muted);margin-bottom:6px';
+  head.textContent='調理済みの在庫　'+S.dishes.length+'品 ・ 合計 '+fmt(total)+'G';
+  wrap.appendChild(head);
+  if(order.length===0){
+    var e=document.createElement('div'); e.style.cssText='font-size:13px;color:var(--muted)'; e.textContent='まだありません（レシピを選んで調理しよう）'; wrap.appendChild(e);
+  } else {
+    order.forEach(function(id){ var a=agg[id];
+      var row=document.createElement('div'); row.style.cssText='display:flex;justify-content:space-between;font-size:14px;padding:3px 0';
+      row.innerHTML='<span>'+dishName(id)+' <span style="color:var(--muted)">×'+a.n+'</span></span><span style="color:var(--gold);font-weight:600">'+fmt(a.sum)+'G</span>';
+      wrap.appendChild(row);
+    });
+  }
+  el.appendChild(wrap);
 }
 function renderRecipes(){
   var el=$('actions');
@@ -443,6 +467,8 @@ function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return null; v
   for(var k in base.fac) if(!(k in d.fac)) d.fac[k]=0;
   for(var k in base.up) if(!(k in d.up)) d.up[k]=0;
   if(!d.on) d.on={}; for(var k in base.on) if(!(k in d.on)) d.on[k]=true;
+  if(!Array.isArray(d.dishes)) d.dishes=[];
+  d.dishes=d.dishes.map(function(x){ return (typeof x==='number')?{id:'_',val:x}:x; });
   d.acc=base.acc; return d; }catch(e){ return null; } }
 
 function offlineGains(){
