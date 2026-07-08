@@ -425,11 +425,12 @@ function offlineGains(){
   var before=S.gold;
   var el=Math.floor((Date.now()-S.t)/1000); el=Math.max(0,Math.min(el,60*60*8));
   if(el<5) return;
-  for(var i=0;i<el;i++) step();
+  var osec=Math.round(el*2/3); // オフライン中は2/3速度で進行
+  for(var i=0;i<osec;i++) step();
   var dg=Math.floor(S.gold-before); if(dg<=0) return;
   var m=Math.floor(el/60),s=el%60;
   var o=$('offline'); o.style.display='block';
-  o.textContent='おかえりなさい！ 留守の '+(m>0?m+'分':'')+s+'秒 の間に自動で +'+dg.toLocaleString()+'G 稼ぎました';
+  o.textContent='おかえりなさい！ 留守の '+(m>0?m+'分':'')+s+'秒 の間に自動で +'+dg.toLocaleString()+'G 稼ぎました（オフラインは2/3速度）';
 }
 
 /* ===== 起動 ===== */
