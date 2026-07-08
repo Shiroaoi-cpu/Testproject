@@ -91,6 +91,14 @@
     <button class="btn mini" id="reset">リセット</button>
   </div>
 
+  <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:24px">
+    <div style="background:var(--surface2);border:1px solid var(--border-strong);border-radius:16px;max-width:340px;width:100%;padding:24px 20px;text-align:center">
+      <div id="modalTitle" style="font-size:18px;font-weight:600;color:var(--gold);margin-bottom:10px"></div>
+      <div id="modalBody" style="font-size:14px;color:var(--muted);line-height:1.7;margin-bottom:20px"></div>
+      <button class="btn" id="modalOk" style="height:46px;width:100%;font-size:16px;font-weight:600;background:#3a2e1e;border-color:rgba(230,178,60,.5);color:var(--gold)">OK!</button>
+    </div>
+  </div>
+
 <script>
 (function(){
 "use strict";
@@ -186,12 +194,28 @@ function addXp(n){
   S.xp+=n;
   while(S.xp>=xpToNext(S.lv)){
     S.xp-=xpToNext(S.lv); S.lv++;
-    var names={5:'炭焼き窯',10:'釣り',20:'白炭窯',30:'鉱石',35:'備長炭窯(樫)',50:'料理'};
-    if(names[S.lv]) msg('Lv.'+S.lv+' 到達！ '+names[S.lv]+' が解放されました');
+    var unlock={
+      10:{n:'釣り',d:'魚を釣って売り、加工（干物）もできます。魚は料理の材料にもなります。'},
+      30:{n:'鉱石',d:'採掘 → 製錬でインゴットを作り、販売できます。'},
+      50:{n:'料理',d:'魚や素材を組み合わせて、高値の料理を調理・販売できます。'}
+    };
+    var minor={5:'炭焼き窯',20:'白炭窯',35:'備長炭窯(樫)'};
+    if(unlock[S.lv]) notify(unlock[S.lv].n+' が解放されました！', 'Lv.'+S.lv+'に到達！<br>「'+unlock[S.lv].n+'」タブが使えるようになりました。<br>'+unlock[S.lv].d);
+    else if(minor[S.lv]) msg('Lv.'+S.lv+' 到達！ '+minor[S.lv]+' が解放されました');
   }
 }
 /* 販売でのみ経験値が入る（＝稼いだGがそのままXP） */
 function earn(g){ S.gold+=g; addXp(g); }
+
+/* ===== モーダル通知（解放時）===== */
+var modalQueue=[], modalVisible=false;
+function notify(title,body){ modalQueue.push({t:title,b:body}); showNextModal(); }
+function showNextModal(){
+  if(modalVisible || !modalQueue.length) return;
+  var m=modalQueue.shift();
+  $('modalTitle').textContent=m.t; $('modalBody').innerHTML=m.b;
+  $('modal').style.display='flex'; modalVisible=true;
+}
 
 /* 火力支払い: 無駄が最小になるよう オガ炭優先→白炭→備長炭 */
 function payFuel(F){
@@ -434,7 +458,8 @@ function offlineGains(){
 }
 
 /* ===== 起動 ===== */
-$('reset').onclick=function(){ if(!confirm('本当に最初からやり直しますか？ セーブは消えます。')) return; S=newState(); tab='wood'; $('offline').style.display='none'; msg('リセットしました'); render(); save(); };
+$('reset').onclick=function(){ if(!confirm('本当に最初からやり直しますか？ セーブは消えます。')) return; S=newState(); tab='wood'; $('offline').style.display='none'; modalQueue=[]; modalVisible=false; $('modal').style.display='none'; msg('リセットしました'); render(); save(); };
+$('modalOk').onclick=function(){ $('modal').style.display='none'; modalVisible=false; showNextModal(); };
 
 S=load()||newState();
 offlineGains();
