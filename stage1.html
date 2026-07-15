@@ -105,7 +105,7 @@ var cv=$('cv'), x=cv.getContext('2d'), W=400, Hc=300, ground=205;
 var xTree=285, xMill=150, plankPile={x:92,y:188}, goldHud={x:26,y:16};
 var hero={x:242, swing:0, chopping:0};
 var workers=[]; // {x,dir,state,swing,chop,carry}
-var parts=[], pops=[], treeShake=0, tick=0;
+var parts=[], pops=[], treeShake=0, tick=0, sawAngle=0, shopKeeperTimer=0;
 
 function ensureWorkers(){
   while(workers.length<G.workers) workers.push({x:xMill,state:'toTree',swing:0,chop:0,carry:false});
@@ -138,10 +138,40 @@ function drawCarrier(px,base,color){
   x.fillStyle='#f0d0a8'; x.beginPath(); x.arc(px,base-37,8,0,7); x.fill();
   x.fillStyle='#b5804a'; x.fillRect(px-12,base-26,10,6); // 抱えた丸太
 }
+function drawSaw(cx,cy,r,ang){
+  x.save(); x.translate(cx,cy); x.rotate(ang);
+  var teeth=12; x.fillStyle='#c9ccd1'; x.beginPath();
+  for(var i=0;i<teeth;i++){
+    var a0=(i/teeth)*6.2832, a1=((i+0.5)/teeth)*6.2832;
+    x.lineTo(Math.cos(a0)*r,Math.sin(a0)*r);
+    x.lineTo(Math.cos(a1)*r*1.28,Math.sin(a1)*r*1.28);
+  }
+  x.closePath(); x.fill();
+  x.fillStyle='#9a9da2'; x.beginPath(); x.arc(0,0,r*0.55,0,7); x.fill();
+  x.fillStyle='#5a5d62'; x.beginPath(); x.arc(0,0,r*0.16,0,7); x.fill();
+  x.strokeStyle='#7a7d82'; x.lineWidth=1.5; x.beginPath(); x.moveTo(0,0); x.lineTo(r*0.5,0); x.stroke();
+  x.restore();
+}
+function drawHat(cx,ty,lv){
+  if(lv<=0) return;
+  if(lv===1){ x.fillStyle='#4a78c0'; x.fillRect(cx-8,ty+2,16,3); x.fillRect(cx-6,ty-2,12,4); }
+  else if(lv===2){ x.fillStyle='#c0504a'; x.beginPath(); x.arc(cx,ty+3,8,Math.PI,0); x.fill(); x.fillRect(cx-8,ty+2,16,2); }
+  else if(lv===3){ x.fillStyle='#3a9160'; x.beginPath(); x.moveTo(cx-8,ty+3); x.lineTo(cx+8,ty+3); x.lineTo(cx,ty-12); x.closePath(); x.fill(); }
+  else if(lv===4){ x.fillStyle='#2c2c2a'; x.fillRect(cx-10,ty+2,20,3); x.fillRect(cx-6,ty-11,12,13); }
+  else { x.fillStyle='#e6b23c'; x.beginPath(); x.moveTo(cx-8,ty+2); x.lineTo(cx-8,ty-6); x.lineTo(cx-4,ty-1); x.lineTo(cx,ty-9); x.lineTo(cx+4,ty-1); x.lineTo(cx+8,ty-6); x.lineTo(cx+8,ty+2); x.closePath(); x.fill(); }
+}
+function drawKeeper(px,base,color,hat){
+  x.fillStyle=color; x.fillRect(px-7,base-27,14,21);
+  x.fillStyle='#f0d0a8'; x.beginPath(); x.arc(px,base-33,7,0,7); x.fill();
+  drawHat(px,base-40,hat);
+}
 function drawMill(){
   x.fillStyle='#7a5236'; x.fillRect(xMill-40,ground-46,80,46);
   x.fillStyle='#5f3f28'; x.beginPath(); x.moveTo(xMill-46,ground-46); x.lineTo(xMill+46,ground-46); x.lineTo(xMill,ground-70); x.fill();
-  x.fillStyle='#f0e9e0'; x.font='11px sans-serif'; x.textAlign='center'; x.fillText('製材所 Lv'+G.millLv,xMill,ground-22);
+  // 回転のこぎり（自動化で出現・レベルで大型化）
+  if(G.millLv>0){ var r=6+Math.min(G.millLv,7)*2.3; drawSaw(xMill-6,ground-24,r,sawAngle); }
+  else { x.fillStyle='#b5804a'; x.fillRect(xMill-16,ground-16,26,7); }
+  x.fillStyle='#f0e9e0'; x.font='11px sans-serif'; x.textAlign='center'; x.fillText('製材所 Lv'+G.millLv,xMill,ground-76);
   // 丸太の山
   x.fillStyle='#b5804a'; for(var i=0;i<Math.min(4,Math.ceil(G.logs/3));i++) x.fillRect(xMill+30,ground-8-i*7,14,6);
 }
@@ -149,7 +179,10 @@ function drawShop(){
   var sx=44;
   x.fillStyle='#b06a2e'; x.fillRect(sx-26,ground-42,52,42);
   x.fillStyle='#e6b23c'; x.fillRect(sx-18,ground-30,36,14);
-  x.fillStyle='#f0e9e0'; x.font='11px sans-serif'; x.textAlign='center'; x.fillText('お店 Lv'+G.shopLv,sx,ground-2);
+  x.fillStyle='#f0e9e0'; x.font='11px sans-serif'; x.textAlign='center'; x.fillText('販売所 Lv'+G.shopLv,sx,ground-52);
+  // 店員（自動:モブ＋レベルで帽子変化 / 手動:主人公が販売時に一瞬出現）
+  if(G.shopLv>0) drawKeeper(70,ground,'#5a8f5a',Math.min(G.shopLv,5));
+  else if(shopKeeperTimer>0) drawKeeper(70,ground,'#c86b3c',0);
   // 板材の山
   x.fillStyle='#d8b483'; for(var i=0;i<Math.min(4,Math.ceil(G.planks/2));i++) x.fillRect(plankPile.x-6,plankPile.y+i*5,20,4);
 }
@@ -191,6 +224,7 @@ function draw(){
     if(q.a<=0) pops.splice(j,1);
   }
   if(treeShake>0) treeShake*=0.9;
+  if(shopKeeperTimer>0) shopKeeperTimer--;
 }
 
 /* ===== 更新 ===== */
@@ -205,6 +239,7 @@ function updateWorkers(dt){
 function loop(ts){
   var dt=Math.min(0.05,((ts-loop.last)||16)/1000); loop.last=ts; tick++;
   hero.swing+= (hero.chopping>0? dt*14 : dt*1.5);
+  sawAngle+= dt*9;
   updateWorkers(dt);
   draw();
   requestAnimationFrame(loop);
@@ -237,7 +272,7 @@ function buy(id){ var c=cost(id); if(G.gold<c){ msg('お金が足りません（
 
 $('bChop').onclick=function(){ G.logs+=G.axeLv; hero.chopping=12; treeShake=1; spawnLogFly(xTree); pop('+'+G.axeLv,xTree-6,ground-46); hud(); };
 $('bProc').onclick=function(){ if(G.logs<2){ msg('原木が足りません（2必要）'); return; } G.logs-=2; G.planks+=1; spawnPlank(); hud(); };
-$('bSell').onclick=function(){ if(G.planks<1){ msg('板材がありません'); return; } G.planks-=1; G.gold+=10; spawnCoin(); pop('+10',44,ground-46); hud(); };
+$('bSell').onclick=function(){ if(G.planks<1){ msg('板材がありません'); return; } G.planks-=1; G.gold+=10; spawnCoin(); pop('+10',44,ground-46); if(G.shopLv===0) shopKeeperTimer=45; hud(); };
 $('rst').onclick=function(){ if(!confirm('最初からやり直しますか？ セーブは消えます。')) return; G=newG(); ensureWorkers(); $('off').style.display='none'; msg('リセットしました'); hud(); save(); };
 
 /* ===== セーブ・オフライン ===== */
